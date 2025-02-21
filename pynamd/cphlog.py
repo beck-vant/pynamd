@@ -4,28 +4,13 @@ except ImportError:
 	from collections.abc import Mapping
 import json
 import warnings
-
+import collections
 import numpy as np
 from scipy.optimize import root, leastsq
-
+import numpy as np
 from pynamd.msmle import MSMLE
 
 
-# It might be useful to implement our own root finding algorithm and avoid
-# dependency on scipy.optimize...
-#def _bisect_vector(f, a, b, tol=1e-5):
-#    """Vector version of bisection method for root finding."""
-#    xmid = 0.5*(a + b)
-#    fa = f(a)
-#    fb = f(b)
-#    fmid = f(xmid)
-#    a = np.where(np.sign(fmid) == np.sign(fa), xmid, a)
-#    b = np.where(np.sign(fmid) == np.sign(fb), xmid, b)
-#    maxerr = np.amax(np.abs(b - a))
-#    if maxerr < tol:
-#        return xmid
-#    else:
-#        return _bisect_vector(f, a, b, tol)
 
 def _validate_typed_list(list_, type_):
     """Check that the argument can be cast as a list of a single type."""
@@ -47,20 +32,25 @@ def _validate_state_dict(dict_):
     """
     if not isinstance(dict_, dict):
         raise ValueError('states must be a dict object')
+    
+    # Create a new dictionary instead of modifying the original during iteration
+    validated_dict = {}
     for k, v in dict_.items():
-        dict_.pop(k, None)
         try:
-            dict_[str(k)] = _validate_typed_list(v, int)
+            validated_dict[str(k)] = _validate_typed_list(v, int)
         except ValueError:
             raise ValueError('Values in state dicts must be integer lists!')
-    vlen = len(list(dict_.values())[0])
-    for k, v in dict_.items():
-        if len(v) == vlen:
-            continue
-        raise ValueError(
-                'Bad list length for state %s (%d != %d)'%(k, len(v), vlen)
-              )
-    return dict_
+    
+    # Check that all lists have the same length
+    if validated_dict:  # Check if dictionary is not empty
+        vlen = len(list(validated_dict.values())[0])
+        for k, v in validated_dict.items():
+            if len(v) != vlen:
+                raise ValueError(
+                    'Bad list length for state %s (%d != %d)' % (k, len(v), vlen)
+                )
+    
+    return validated_dict
 
 def _validate_float(value):
     try:
@@ -1167,8 +1157,7 @@ class TitratableSystem(Mapping):
             pKas = json_data[resname]['pKa']
             nsites = len(list(states.values())[0])
             j = i + nsites
-            obj[segresidname] =\
-                    TitratableResidue(segresidname, states, pKas, occ[:, i:j])
+            obj[segresidname] = TitratableResidue(segresidname, states, pKas, occ[:, i:j])
             i = j
         return obj
 
